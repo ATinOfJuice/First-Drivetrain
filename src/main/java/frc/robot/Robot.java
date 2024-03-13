@@ -7,9 +7,12 @@ package frc.robot;
 import edu.wpi.first.util.sendable.SendableRegistry;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.Timer;
-import edu.wpi.first.wpilibj.XboxController;
 import edu.wpi.first.wpilibj.drive.DifferentialDrive;
-import edu.wpi.first.wpilibj.motorcontrol.PWMSparkMax;
+import edu.wpi.first.wpilibj.Joystick;
+
+import com.revrobotics.CANSparkMax;
+import com.revrobotics.CANSparkLowLevel.MotorType;
+
 
 /**
  * The VM is configured to automatically run this class, and to call the functions corresponding to
@@ -18,16 +21,22 @@ import edu.wpi.first.wpilibj.motorcontrol.PWMSparkMax;
  * directory.
  */
 public class Robot extends TimedRobot {
-  private final PWMSparkMax m_leftDrive = new PWMSparkMax(0);
-  private final PWMSparkMax m_rightDrive = new PWMSparkMax(1);
-  private final DifferentialDrive m_robotDrive =
-      new DifferentialDrive(m_leftDrive::set, m_rightDrive::set);
-  private final XboxController m_controller = new XboxController(0);
-  private final Timer m_timer = new Timer();
+  private static final int leftDeviceID = 2; 
+  private static final int rightDeviceID = 3;
+  private CANSparkMax m_leftDrive = new CANSparkMax(leftDeviceID, MotorType.kBrushed);
+  private CANSparkMax m_rightDrive = new CANSparkMax(rightDeviceID, MotorType.kBrushed);
+  private DifferentialDrive m_robotDrive = new DifferentialDrive(m_leftDrive, m_rightDrive);
+  private Joystick m_leftStick = new Joystick(0);
+  private Joystick m_rightStick = new Joystick (1);
+  private Timer m_timer;
+  
+  
 
   public Robot() {
     SendableRegistry.addChild(m_robotDrive, m_leftDrive);
     SendableRegistry.addChild(m_robotDrive, m_rightDrive);
+    m_leftDrive.restoreFactoryDefaults();
+    m_rightDrive.restoreFactoryDefaults();
   }
 
   /**
@@ -67,7 +76,7 @@ public class Robot extends TimedRobot {
   /** This function is called periodically during teleoperated mode. */
   @Override
   public void teleopPeriodic() {
-    m_robotDrive.arcadeDrive(-m_controller.getLeftY(), -m_controller.getRightX());
+    m_robotDrive.tankDrive(m_leftStick.getY(), m_rightStick.getY());
   }
 
   /** This function is called once each time the robot enters test mode. */
