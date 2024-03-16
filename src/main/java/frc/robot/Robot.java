@@ -14,7 +14,7 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 //import edu.wpi.first.wpilibj2.command.PIDCommand;
 import edu.wpi.first.cameraserver.CameraServer;
 import edu.wpi.first.wpilibj.XboxController;
-import edu.wpi.first.wpilibj.DigitalInput;
+import edu.wpi.first.wpilibj.AnalogInput;
 
 import com.revrobotics.CANSparkMax;
 import com.revrobotics.CANSparkLowLevel.MotorType;
@@ -27,143 +27,294 @@ import com.revrobotics.CANSparkLowLevel.MotorType;
  * directory.
  */
 public class Robot extends TimedRobot {
+  //Motor IDs
   private static final int leftDeviceID1 = 2; 
   private static final int rightDeviceID1 = 4;
   private static final int leftDeviceID2 = 3; 
   private static final int rightDeviceID2 = 5;
   private static final int intakeDeviceID = 6;
   private static final int flywheelDeviceID = 7;
-  private CANSparkMax m_leftDrive1 = new CANSparkMax(leftDeviceID1, MotorType.kBrushed);
-  private CANSparkMax m_leftDrive2 = new CANSparkMax(leftDeviceID2, MotorType.kBrushed);
-  private CANSparkMax m_rightDrive1 = new CANSparkMax(rightDeviceID1, MotorType.kBrushed);
-  private CANSparkMax m_rightDrive2 = new CANSparkMax(rightDeviceID2, MotorType.kBrushed);
+
+  //Drives and Motor Assignment
+  private CANSparkMax leftDrive1 = new CANSparkMax(leftDeviceID1, MotorType.kBrushed);
+  private CANSparkMax leftDrive2 = new CANSparkMax(leftDeviceID2, MotorType.kBrushed);
+  private CANSparkMax rightDrive1 = new CANSparkMax(rightDeviceID1, MotorType.kBrushed);
+  private CANSparkMax rightDrive2 = new CANSparkMax(rightDeviceID2, MotorType.kBrushed);
   private CANSparkMax intakeMotor = new CANSparkMax(intakeDeviceID, MotorType.kBrushed);
   private CANSparkMax flywheelMotor = new CANSparkMax(flywheelDeviceID, MotorType.kBrushless);
-  private DifferentialDrive m_robotDrive1 = new DifferentialDrive(m_leftDrive1, m_rightDrive1);
-  private DifferentialDrive m_robotDrive2 = new DifferentialDrive(m_leftDrive2, m_rightDrive2);
+  private DifferentialDrive robotDrive1 = new DifferentialDrive(leftDrive1, rightDrive1);
+  private DifferentialDrive robotDrive2 = new DifferentialDrive(leftDrive2, rightDrive2);
+
+  //Controllers
   private XboxController controller1 = new XboxController(0);
   private XboxController controller2 = new XboxController(1);
-  //private AnalogInput noteProx = new AnalogInput(0);
+
+  //Sensors
+  private AnalogInput noteProx = new AnalogInput(0);
   //private DigitalInput noteLimit = new DigitalInput(0);
-  private final Timer m_timer = new Timer();
+
+  //Timers and Timer Resets/Delays
+  private final Timer autoTimer = new Timer();
+  private final Timer intakeReversedTimer = new Timer();
+  private final Timer intakeReversedTimerDelay = new Timer();
+  private boolean intakeReversedTimerReset = false;
   private final Timer flywheelReleaseTimer = new Timer();
   private final Timer flywheelReleaseTimerDelay = new Timer();
-
+  private double autoShooterStartTime = 0;
+  private double autoIntakeStartTime = 0;
+  
+  //Status' and Button Delays
   private boolean intakestatus = false;
-  private boolean flywheelstatus = false;
-  private boolean aButtonDelay = false;
-  private boolean bButtonDelay = false;
+  private boolean lBumperDelay = false;
   private boolean xButtonDelay = false;
   private boolean rBumperDelay = false;
-  private boolean previousBButtonPressed = false;
+  private boolean reversedintakestatus = false;
 
+  //TeleOp Half Speed
   private double halved = 1;
 
+  //Autonomous Paths for SmartDashboard
   private static final String basicAuto = "Basic";
-  private static final String shootBasicAuto = "Shooting Only Basic";
-  private static final String driveBasicAuto = "Driving Only Basic";
   private static final String closeAuto = "Four Note Close";
   private static final String farAutoTwoNote = "Two Note Far";
   private static final String farAutoOneNote = "One Note Far";
   private String autoSelected;
-  private final SendableChooser<String> chooser = new SendableChooser<>();
+  private final SendableChooser<String> autoChooser = new SendableChooser<>();
 
+  //Alliance Choosing for Smart Dashboard
+  private static final String blueAlliance = "Blue Alliance";
+  private static final String redAlliance = "Red Alliance";
+  private String allianceSelected;
+  private final SendableChooser<String> allianceChooser = new SendableChooser<>();
+
+  //Autonomous Multipliers
+  private int straightFrictionMult = 1;
+  private int turningFrictionMult = 1;
+  private int wallMult = 1;
+  private int allianceMult = 0;
 
   public Robot() {
-    SendableRegistry.addChild(m_robotDrive1, m_leftDrive1);
-    SendableRegistry.addChild(m_robotDrive1, m_leftDrive2);
-    SendableRegistry.addChild(m_robotDrive2, m_rightDrive1);
-    SendableRegistry.addChild(m_robotDrive2, m_rightDrive2);
-    m_leftDrive1.restoreFactoryDefaults();
-    m_rightDrive1.restoreFactoryDefaults();
+    SendableRegistry.addChild(robotDrive1, leftDrive1);
+    SendableRegistry.addChild(robotDrive1, leftDrive2);
+    SendableRegistry.addChild(robotDrive2, rightDrive1);
+    SendableRegistry.addChild(robotDrive2, rightDrive2);
+    leftDrive1.restoreFactoryDefaults();
+    rightDrive1.restoreFactoryDefaults();
   }
 
-  /*public double getSensorDistance() {
+  //Distance from IR sensor. Used with intake.
+  public double getDistance() {
     return (Math.pow(noteProx.getAverageVoltage(), -1.2045)) * 27.726;
-  }*/
+  }
 
-  /**
-   * This function is run when the robot is first started up and should be used for any
-   * initialization code.
-   */
+  //Autonomous Functions
+  public void autoShooterSequence(){
+    if (autoTimer.get() - autoShooterStartTime <= 2){
+      flywheelMotor.set(1);
+    } else if ((autoTimer.get() - autoShooterStartTime > 2) && (autoTimer.get() - autoShooterStartTime < 3)){
+      flywheelMotor.set(1);
+      intakeMotor.set(0.9);
+    } else {
+      flywheelMotor.stopMotor();
+      intakeMotor.stopMotor();
+    }
+  }
+  public void autoIntakeSequence(){
+    if (getDistance() > 20 || (autoTimer.get() - autoIntakeStartTime > 5)){
+      intakeMotor.stopMotor();
+    } else {
+      intakeMotor.set(0.9);
+    }
+  }
+  public void autoForwardSlow(){
+    robotDrive1.tankDrive(-0.5*straightFrictionMult, -0.5*straightFrictionMult);
+    robotDrive2.tankDrive(-0.5*straightFrictionMult, -0.5*straightFrictionMult);
+  }
+  public void autoBackwardSlow(){
+    robotDrive1.tankDrive(0.5*straightFrictionMult, 0.5*straightFrictionMult);
+    robotDrive2.tankDrive(0.5*straightFrictionMult, 0.5*straightFrictionMult);
+  }
+  public void autoForwardFast(){
+    robotDrive1.tankDrive(-1*straightFrictionMult, -1*straightFrictionMult);
+    robotDrive2.tankDrive(-1*straightFrictionMult, -1*straightFrictionMult);
+  }
+  public void autoBackwardFast(){
+    robotDrive1.tankDrive(1*straightFrictionMult, 1*straightFrictionMult);
+    robotDrive2.tankDrive(1*straightFrictionMult, 1*straightFrictionMult);
+  }
+  public void autoTurnLeft(){
+    robotDrive1.tankDrive(0.7*turningFrictionMult*allianceMult, -0.7*turningFrictionMult*allianceMult);
+    robotDrive2.tankDrive(0.7*turningFrictionMult*allianceMult, -0.7*turningFrictionMult*allianceMult);
+  }
+  public void autoTurnRight(){
+    robotDrive1.tankDrive(-0.7*turningFrictionMult*allianceMult, 0.7*turningFrictionMult*allianceMult);
+    robotDrive2.tankDrive(-0.7*turningFrictionMult*allianceMult, 0.7*turningFrictionMult*allianceMult);
+  }
+  public void autoStop(){
+    robotDrive1.tankDrive(0, 0);
+    robotDrive2.tankDrive(0, 0);
+  }
+
+  //Robot Initilization
   @Override
   public void robotInit() {
-    // We need to invert one side of the drivetrain so that positive voltages
-    // result in both sides moving forward. Depending on how your robot's
-    // gearbox is constructed, you might have to invert the left side instead.
-    m_rightDrive1.setInverted(true);
-    m_rightDrive2.setInverted(true);
-    chooser.setDefaultOption("Basic", basicAuto);
-    chooser.addOption("Shooting Only Basic", shootBasicAuto);
-    chooser.addOption("Driving Only Basic", driveBasicAuto);
-    chooser.addOption("Four Note Close", closeAuto);
-    chooser.addOption("Two Note Far", farAutoTwoNote);
-    chooser.addOption("One Note Far", farAutoOneNote);
-    SmartDashboard.putData("Auto choices", chooser);
+    //Inverting Drives
+    rightDrive1.setInverted(true);
+    rightDrive2.setInverted(true);
+
+    //Autonomous SmartDashboard Option Adding
+    autoChooser.setDefaultOption("Basic", basicAuto);
+    autoChooser.addOption("Four Note Close", closeAuto);
+    autoChooser.addOption("Two Note Far", farAutoTwoNote);
+    autoChooser.addOption("One Note Far", farAutoOneNote);
+    SmartDashboard.putData("Auto Choices", autoChooser);
+
+    //Alliance SmartDashboard Option Adding
+    allianceChooser.setDefaultOption("Red Alliance", redAlliance);
+    allianceChooser.addOption("Blue Alliance", blueAlliance);
+    SmartDashboard.putData("Alliance Choices", allianceChooser);
+
+    //Camera Bootup
     CameraServer.startAutomaticCapture();
   }
 
-  /** This function is run once each time the robot enters autonomous mode. */
+  //Autonomous Initilization
   @Override
   public void autonomousInit() {
-    autoSelected = chooser.getSelected();
-    System.out.println("Auto selected:" + autoSelected);
-    m_timer.restart();
+    //Selecting the Autonomous Pathing
+    autoSelected = autoChooser.getSelected();
+    System.out.println("Auto Selected: " + autoSelected);
+
+    //Selecting the Alliance
+    allianceSelected = allianceChooser.getSelected();
+    System.out.println("Alliance selected: " + allianceSelected);
+    if (allianceSelected == blueAlliance){
+      allianceMult = -1;
+    } else {
+      allianceMult = 1;
+    }
+
+    //Restarting the Main Timer
+    autoTimer.restart();
   }
 
-  /** This function is called periodically during autonomous. */
+  //Autonomous Periodic
   @Override
   public void autonomousPeriodic() {
-    switch (autoSelected){
-      case basicAuto:
-        
-        break;
-      case shootBasicAuto:
-
-        break;
-      case driveBasicAuto:
-
-        break;
-      case closeAuto:
-
-        break;
-      case farAutoTwoNote:
-
-        break;
-      case farAutoOneNote:
-
-        break;
+    //Base Autonomous Movement for All Paths
+    if (autoTimer.get() < 2.6){
+      autoForwardSlow();
+    } else if (autoTimer.get() < 3.1){
+      autoTurnLeft();      
+    } else if (autoTimer.get() < 5.1){
+      autoBackwardSlow();
+    } else if (autoTimer.get() < 5.7){
+      autoTurnRight();      
+      autoShooterStartTime = autoTimer.get();
+    } else if (autoTimer.get() < 8.8){
+      autoStop();
+      autoShooterSequence();
+    } else if (autoTimer.get() < 10){
+      autoForwardSlow();
+    }
+    if (autoTimer.get() > 10){
+      switch (autoSelected){
+        //Basic Auto Path
+        case basicAuto:
+          if (autoTimer.get() < 10.5){
+            autoTurnLeft();                  
+          } else if (autoTimer.get() < 11.7){
+            autoForwardFast();
+          } else if (autoTimer.get() < 12.3){
+            autoBackwardFast();
+          } else {
+            autoStop();  
+          }
+          break;
+        //Auto for the Three Closest Notes
+        case closeAuto:
+          if (autoTimer.get() < 10.5){
+            autoStop(); 
+          } else {
+            autoStop();
+          }
+          break;
+        //Auto for the Far Notes Closest to the Stage
+        case farAutoTwoNote:
+          if (autoTimer.get() < 10.4){
+            autoTurnRight();            
+          } else if (autoTimer.get() < 12.5){
+            autoForwardSlow();
+          } else if (autoTimer.get() < 12.9){
+            autoTurnLeft();                  
+          } else if (autoTimer.get() < 13.9){
+            autoForwardFast();
+          } else if (autoTimer.get() < 14.4){
+            autoBackwardFast();
+            autoIntakeStartTime = autoTimer.get();
+          } else if (autoTimer.get() < 16.4){
+            autoForwardSlow();
+            autoIntakeSequence();
+          } else if (autoTimer.get() < 16.8){
+            autoTurnLeft();
+          } else if (autoTimer.get() < 17.8){
+            autoForwardSlow();
+          } else {
+            autoStop();
+          }
+          break;
+        //Auto for the Far Notes Furthest from the Stage
+        case farAutoOneNote:
+          if (autoTimer.get() < 10.5){
+            autoTurnLeft();                  
+          } else if (autoTimer.get() < 11.5){
+            autoForwardFast();
+          } else if (autoTimer.get() < 12){
+            autoBackwardFast();
+          } else if (autoTimer.get() < 12.5){
+            autoTurnRight();
+          } else if (autoTimer.get() < 13.5){
+            autoForwardFast();
+          } else {
+            autoStop();
+          }
+          break;
+      }
     }
   }
 
-  /** This function is called once each time the robot enters teleoperated mode. */
+  //TeleOp Initialization
   @Override
   public void teleopInit() {
+    //Timer Reset
     flywheelReleaseTimer.restart();
     flywheelReleaseTimerDelay.restart();
+    intakeReversedTimer.restart();
+    intakeReversedTimerDelay.restart();
   }
 
   /** This function is called periodically during teleoperated mode. */
   @Override
   public void teleopPeriodic() {
+    //Movement Controls
     if ((controller1.getLeftY() >= 0.1 || controller1.getLeftY() <= -0.1) && (controller1.getRightX() <= 0.1 && controller1.getRightX() >= -0.1)){
-      m_robotDrive1.tankDrive(controller1.getLeftY()*halved, controller1.getLeftY()*halved);
-      m_robotDrive2.tankDrive(controller1.getLeftY()*halved, controller1.getLeftY()*halved);
+      robotDrive1.tankDrive(controller1.getLeftY()*halved, controller1.getLeftY()*halved);
+      robotDrive2.tankDrive(controller1.getLeftY()*halved, controller1.getLeftY()*halved);
     } else if ((controller1.getLeftY() >= 0.1 || controller1.getLeftY() <= -0.1) && (controller1.getRightX() > 0.1 || controller1.getRightX() < -0.1)){
       if (halved == 0.5){
-        m_robotDrive1.tankDrive(controller1.getLeftY()*0.5 - controller1.getRightX()*0.3, controller1.getLeftY()*0.5 + controller1.getRightX()*0.3);
-        m_robotDrive2.tankDrive(controller1.getLeftY()*0.5 - controller1.getRightX()*0.3, controller1.getLeftY()*0.5 + controller1.getRightX()*0.3);
+        robotDrive1.tankDrive(controller1.getLeftY()*0.5 - controller1.getRightX()*0.3, controller1.getLeftY()*0.5 + controller1.getRightX()*0.3);
+        robotDrive2.tankDrive(controller1.getLeftY()*0.5 - controller1.getRightX()*0.3, controller1.getLeftY()*0.5 + controller1.getRightX()*0.3);
       } else {
-        m_robotDrive1.tankDrive(controller1.getLeftY()*0.7 - controller1.getRightX()*0.3, controller1.getLeftY()*0.7 + controller1.getRightX()*0.3);
-        m_robotDrive2.tankDrive(controller1.getLeftY()*0.7 - controller1.getRightX()*0.3, controller1.getLeftY()*0.7 + controller1.getRightX()*0.3);
+        robotDrive1.tankDrive(controller1.getLeftY()*0.7 - controller1.getRightX()*0.3, controller1.getLeftY()*0.7 + controller1.getRightX()*0.3);
+        robotDrive2.tankDrive(controller1.getLeftY()*0.7 - controller1.getRightX()*0.3, controller1.getLeftY()*0.7 + controller1.getRightX()*0.3);
       }
     } else {
       if (halved == 0.5){
-        m_robotDrive1.tankDrive(-controller1.getRightX()*0.7, controller1.getRightX()*0.7);
-        m_robotDrive2.tankDrive(-controller1.getRightX()*0.7, controller1.getRightX()*0.7);
+        robotDrive1.tankDrive(-controller1.getRightX()*0.7, controller1.getRightX()*0.7);
+        robotDrive2.tankDrive(-controller1.getRightX()*0.7, controller1.getRightX()*0.7);
       } else {
-        m_robotDrive1.tankDrive(-controller1.getRightX(), controller1.getRightX());
-        m_robotDrive2.tankDrive(-controller1.getRightX(), controller1.getRightX());
+        robotDrive1.tankDrive(-controller1.getRightX(), controller1.getRightX());
+        robotDrive2.tankDrive(-controller1.getRightX(), controller1.getRightX());
       }
     }
     if (controller1.getRightBumperPressed() && !rBumperDelay){
@@ -177,19 +328,33 @@ public class Robot extends TimedRobot {
     if (controller1.getRightBumperReleased()){
       rBumperDelay = false;
     }
-    if (controller1.getAButtonPressed() && !aButtonDelay){
+
+    //Controller 1 Intake
+    if (controller1.getLeftBumperPressed() && !lBumperDelay){
       intakestatus = !intakestatus;
-      aButtonDelay = true;
+      lBumperDelay = true;
     }
-    if (controller1.getAButtonReleased()){
-      aButtonDelay = false;
+    if (controller1.getLeftBumperReleased()){
+      lBumperDelay = false;
     }
-    //if (controller1.getAButtonPressed() && (getDistance() > 20)){
-    if (controller1.getBButton()){
+
+    //Intake Auto-Stop
+    if (getDistance() < 20){
+      intakestatus = false;
+      if (!intakeReversedTimerReset){
+        intakeReversedTimer.restart();
+        intakeReversedTimerReset = true;
+      }
+    } else {
+      intakeReversedTimerReset = false;
+    }
+
+    //Shooting
+    if (controller2.getBButton()){
       flywheelMotor.set(1);
       flywheelReleaseTimer.restart();
     }
-    if (!controller1.getBButton()){
+    if (!controller2.getBButton()){
       if (flywheelReleaseTimer.get() > 0.1 && flywheelReleaseTimer.get() < 2 && flywheelReleaseTimerDelay.get() > 2){
         flywheelMotor.set(1);
         intakestatus = true;
@@ -197,112 +362,34 @@ public class Robot extends TimedRobot {
         flywheelMotor.stopMotor();
       }
     }
-    if (controller1.getAButtonPressed() && !aButtonDelay){
-      intakestatus = !intakestatus;
-      aButtonDelay = true;
-    }
-    if (controller1.getAButtonReleased()){
-      aButtonDelay = false;
-    }
-    if ((controller1.getXButtonPressed() || controller1.getXButtonPressed()) && !xButtonDelay){
-      flywheelstatus = false;
-      intakestatus = false;
-      xButtonDelay = true;
-    }
-    if (controller1.getXButtonReleased() || controller1.getXButtonReleased()){
-      xButtonDelay = false;
-    }
-    if (intakestatus){
-      intakeMotor.set(0.9);
+
+    //Reverse intake
+    if (controller2.getYButton()){
+      reversedintakestatus = true;
+    } else if (intakeReversedTimer.get() > 0.1 && intakeReversedTimer.get() < 0.15 && intakeReversedTimerDelay.get() > 0.15){
+      reversedintakestatus = true;
     } else {
-      intakeMotor.stopMotor();
+      reversedintakestatus = false;
     }
-    /*if (noteLimit.get() && (flywheelReleaseTimer.get() < 0.1 || flywheelReleaseTimer.get() > 2)){
-      intakestatus = false;
-    }*/
-    //Old Code for Flywheel and Feeding
-    /*if (controller2.getAButtonPressed()){
-      feederstatus = true;
-      feederTimer.reset();
-    }
-    if (controller2.getBButtonPressed() && !bButtonDelay){
-      flywheelstatus = !flywheelstatus;
-      flywheelTimer.reset();
-      bButtonDelay = true;
-    }
-    if (controller2.getBButtonReleased()){
-      bButtonDelay = false;
-    }*/
-    /*if (controller1.getBButtonPressed()){
-      flywheelstatus = true;
-      previousBButtonPressed = true;
-    }
-    if (controller1.getBButtonReleased()){
-      if (previousBButtonPressed == true){
-        flywheelReleaseTimer.restart();
-        previousBButtonPressed = false;
-      }
-    }
-    if(flywheelReleaseTimerDelay.get() <= 3){
-      flywheelReleaseTimer.restart();
-    }
-    if (flywheelReleaseTimer.get() > 0.1 && flywheelReleaseTimer.get() < 2 && controller1.getBButtonReleased()){
-      flywheelstatus = true;
-      intakestatus = true;
-    } else if ((flywheelReleaseTimer.get() < 0.1 || flywheelReleaseTimer.get() > 2) && controller1.getBButtonPressed()){
-      flywheelstatus = true;
-      intakestatus = false;
-    } else if ((flywheelReleaseTimer.get() < 0.1 || flywheelReleaseTimer.get() > 2) && controller1.getBButtonReleased()){
-      flywheelstatus = false;
-    }
-    if ((controller1.getXButtonPressed() || controller1.getXButtonPressed()) && !xButtonDelay){
-      flywheelstatus = false;
-      intakestatus = false;
-      xButtonDelay = true;
-    }
-    if (controller1.getXButtonReleased() || controller1.getXButtonReleased()){
-      xButtonDelay = false;
-    }
-    if (controller1.getRightBumperPressed() && !rBumperDelay){
-      if (halved == 0.5){
-        halved = 1;
-      } else {
-        halved = 0.5;
-      }
-      rBumperDelay = true;
-    }
-    if (controller1.getRightBumperReleased()){
-      rBumperDelay = false;
-    }
-    if (intakestatus){
-      if (getDistance() > 20){
-        intakeMotor.set(0.6);
-      } else {
-        intakeMotor.stopMotor();
-        intakestatus = false;
-      }
-    }
-    if (intakestatus){
-      intakeMotor.set(0.9);
-    } else {
-      intakeMotor.stopMotor();
-    }
-    //Old code for Feeding
-    if (feederstatus){
-      if(feederTimer.get() < 3){
-        intakeMotor.set(0.6);
-      } else {
-        feederstatus = false;
-      }
-    }
-    if (flywheelstatus){
-      flywheelMotor.set(1);
-    } else {
+
+    //Full Stop of Intake and Shooter
+    if ((controller1.getLeftTriggerAxis() > 0.5 || controller2.getXButtonPressed()) && !xButtonDelay){
       flywheelMotor.stopMotor();
+      intakestatus = false;
+      xButtonDelay = true;
     }
-    if (getSensorDistance() < 20){
-      System.err.println(getSensorDistance());
-    }*/
+    if (controller1.getLeftTriggerAxis() < 0.5 || controller2.getXButtonReleased()){
+      xButtonDelay = false;
+    }
+
+    //Intake setting
+    if (intakestatus){
+      intakeMotor.set(0.9);
+    } else if (reversedintakestatus){
+      intakeMotor.set(-0.9);
+    } else {
+      intakeMotor.stopMotor();
+    }
   }
   /** This function is called once each time the robot enters test mode. */
   @Override
