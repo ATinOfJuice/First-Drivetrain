@@ -17,6 +17,7 @@ import edu.wpi.first.wpilibj.XboxController;
 import edu.wpi.first.wpilibj.AnalogInput;
 
 import com.revrobotics.CANSparkMax;
+import com.revrobotics.RelativeEncoder;
 import com.revrobotics.CANSparkLowLevel.MotorType;
 
 
@@ -45,6 +46,9 @@ public class Robot extends TimedRobot {
   private DifferentialDrive robotDrive1 = new DifferentialDrive(leftDrive1, rightDrive1);
   private DifferentialDrive robotDrive2 = new DifferentialDrive(leftDrive2, rightDrive2);
 
+  //Encoders
+  private RelativeEncoder flywheelEncoder = flywheelMotor.getEncoder();
+
   //Controllers
   private XboxController controller1 = new XboxController(0);
   private XboxController controller2 = new XboxController(1);
@@ -55,6 +59,7 @@ public class Robot extends TimedRobot {
 
   //Timers and Timer Resets/Delays
   private final Timer autoTimer = new Timer();
+  private final Timer autoIntakeReversedTimer = new Timer();
   private final Timer intakeReversedTimer = new Timer();
   private final Timer intakeReversedTimerDelay = new Timer();
   private boolean intakeReversedTimerReset = false;
@@ -74,7 +79,8 @@ public class Robot extends TimedRobot {
   private double halved = 1;
 
   //Autonomous Paths for SmartDashboard
-  private static final String basicAuto = "Basic";
+  private static final String basicAutoLeft = "Left Basic";
+  private static final String basicAutoRight = "Right Basic";
   private static final String closeAuto = "Four Note Close";
   private static final String farAutoTwoNote = "Two Note Far";
   private static final String farAutoOneNote = "One Note Far";
@@ -90,7 +96,7 @@ public class Robot extends TimedRobot {
   //Autonomous Multipliers
   private int straightFrictionMult = 1;
   private int turningFrictionMult = 1;
-  private int wallMult = 1;
+  //private int wallMult = 1;
   private int allianceMult = 0;
 
   public Robot() {
@@ -120,10 +126,17 @@ public class Robot extends TimedRobot {
     }
   }
   public void autoIntakeSequence(){
-    if (getDistance() > 20 || (autoTimer.get() - autoIntakeStartTime > 5)){
+    if (getDistance() > 20){
+      if (autoIntakeReversedTimer.get() < 0.04){
+        intakeMotor.set(0.9);
+      } else {
+        intakeMotor.stopMotor();
+      }
+    } else if (autoTimer.get() - autoIntakeStartTime > 1.5){
       intakeMotor.stopMotor();
     } else {
-      intakeMotor.set(0.9);
+      intakeMotor.set(-0.9);
+      autoIntakeReversedTimer.restart();
     }
   }
   public void autoForwardSlow(){
@@ -162,8 +175,14 @@ public class Robot extends TimedRobot {
     rightDrive1.setInverted(true);
     rightDrive2.setInverted(true);
 
+    //TeleOp Displays
+    SmartDashboard.putBoolean("Note Available: ", false);
+    SmartDashboard.putNumber("Flywheel Speed: ", flywheelEncoder.getVelocity());
+    SmartDashboard.putBoolean("Intake On: ", intakestatus);
+
     //Autonomous SmartDashboard Option Adding
-    autoChooser.setDefaultOption("Basic", basicAuto);
+    autoChooser.setDefaultOption("Left Basic", basicAutoLeft);
+    autoChooser.setDefaultOption("Right Basic", basicAutoRight);
     autoChooser.addOption("Four Note Close", closeAuto);
     autoChooser.addOption("Two Note Far", farAutoTwoNote);
     autoChooser.addOption("One Note Far", farAutoOneNote);
@@ -202,78 +221,75 @@ public class Robot extends TimedRobot {
   @Override
   public void autonomousPeriodic() {
     //Base Autonomous Movement for All Paths
-    if (autoTimer.get() < 2.6){
-      autoForwardSlow();
-    } else if (autoTimer.get() < 3.1){
-      autoTurnLeft();      
-    } else if (autoTimer.get() < 5.1){
-      autoBackwardSlow();
-    } else if (autoTimer.get() < 5.7){
-      autoTurnRight();      
-      autoShooterStartTime = autoTimer.get();
-    } else if (autoTimer.get() < 8.8){
-      autoStop();
+    if (autoTimer.get() < 3.1){
       autoShooterSequence();
-    } else if (autoTimer.get() < 10){
+      autoStop();
+    } else if (autoTimer.get() < 4){
       autoForwardSlow();
-    }
-    if (autoTimer.get() > 10){
+    } 
+    if (autoTimer.get() > 4){
       switch (autoSelected){
         //Basic Auto Path
-        case basicAuto:
-          if (autoTimer.get() < 10.5){
-            autoTurnLeft();                  
-          } else if (autoTimer.get() < 11.7){
+        case basicAutoLeft:
+          if (autoTimer.get() < 5){
             autoForwardFast();
-          } else if (autoTimer.get() < 12.3){
+          } else if (autoTimer.get() < 5.4){
             autoBackwardFast();
           } else {
-            autoStop();  
+            autoStop();
+          }
+          break;
+        case basicAutoRight:
+          if (autoTimer.get() < 4.27){
+            autoTurnLeft();
+          } else if (autoTimer.get() < 7.3){
+            autoForwardSlow();
+          } else {
+            autoStop();
           }
           break;
         //Auto for the Three Closest Notes
         case closeAuto:
-          if (autoTimer.get() < 10.5){
-            autoStop(); 
+          if (autoTimer.get() < 4.15){
+            autoTurnLeft();
+            autoIntakeStartTime = autoTimer.get();
+          } else if (autoTimer.get() < 5.65){
+            autoForwardSlow();
+            autoIntakeSequence();
+          } else if (autoTimer.get() < 7.65){
+            autoBackwardSlow();
+            autoIntakeSequence();
+            autoShooterStartTime = autoTimer.get();
+          } else if (autoTimer.get() < 7.8){
+            autoTurnRight();
+            autoShooterSequence();
+          } else if (autoTimer.get() < 8){
+            autoBackwardSlow();
+            autoShooterSequence();
+          } else if (autoTimer.get() < 10.7){
+            autoShooterSequence();
+            autoStop();
           } else {
             autoStop();
           }
           break;
         //Auto for the Far Notes Closest to the Stage
         case farAutoTwoNote:
-          if (autoTimer.get() < 10.4){
-            autoTurnRight();            
-          } else if (autoTimer.get() < 12.5){
-            autoForwardSlow();
-          } else if (autoTimer.get() < 12.9){
-            autoTurnLeft();                  
-          } else if (autoTimer.get() < 13.9){
-            autoForwardFast();
-          } else if (autoTimer.get() < 14.4){
-            autoBackwardFast();
-            autoIntakeStartTime = autoTimer.get();
-          } else if (autoTimer.get() < 16.4){
-            autoForwardSlow();
-            autoIntakeSequence();
-          } else if (autoTimer.get() < 16.8){
+          if (autoTimer.get() < 4.3){
             autoTurnLeft();
-          } else if (autoTimer.get() < 17.8){
-            autoForwardSlow();
+          } else if (autoTimer.get() < 6.3){
+            autoForwardFast();
           } else {
             autoStop();
           }
           break;
         //Auto for the Far Notes Furthest from the Stage
         case farAutoOneNote:
-          if (autoTimer.get() < 10.5){
-            autoTurnLeft();                  
-          } else if (autoTimer.get() < 11.5){
-            autoForwardFast();
-          } else if (autoTimer.get() < 12){
-            autoBackwardFast();
-          } else if (autoTimer.get() < 12.5){
+          if (autoTimer.get() < 6){
+            autoForwardSlow();
+          } else if (autoTimer.get() < 6.2){
             autoTurnRight();
-          } else if (autoTimer.get() < 13.5){
+          } else if (autoTimer.get() < 7.5){
             autoForwardFast();
           } else {
             autoStop();
@@ -291,6 +307,9 @@ public class Robot extends TimedRobot {
     flywheelReleaseTimerDelay.restart();
     intakeReversedTimer.restart();
     intakeReversedTimerDelay.restart();
+    SmartDashboard.putBoolean("Note Available: ", false);
+    SmartDashboard.putNumber("Flywheel Speed: ", flywheelEncoder.getVelocity());
+    SmartDashboard.putBoolean("Intake On: ", intakestatus);
   }
 
   /** This function is called periodically during teleoperated mode. */
@@ -329,18 +348,20 @@ public class Robot extends TimedRobot {
       rBumperDelay = false;
     }
 
-    //Controller 1 Intake
-    if (controller1.getLeftBumperPressed() && !lBumperDelay){
+    //Controller 1 & 2 Intake
+    if (controller1.getLeftBumperPressed() || controller2.getAButtonPressed() && !lBumperDelay){
       intakestatus = !intakestatus;
       lBumperDelay = true;
     }
-    if (controller1.getLeftBumperReleased()){
+    if (controller1.getLeftBumperReleased() || controller2.getAButtonReleased()){
       lBumperDelay = false;
     }
 
     //Intake Auto-Stop
     if (getDistance() < 20){
       intakestatus = false;
+      SmartDashboard.putBoolean("Note Available", true);
+      System.out.println("Sensor Working");
       if (!intakeReversedTimerReset){
         intakeReversedTimer.restart();
         intakeReversedTimerReset = true;
@@ -353,11 +374,14 @@ public class Robot extends TimedRobot {
     if (controller2.getBButton()){
       flywheelMotor.set(1);
       flywheelReleaseTimer.restart();
+      SmartDashboard.putNumber("Flywheel Speed", flywheelEncoder.getVelocity());
     }
     if (!controller2.getBButton()){
       if (flywheelReleaseTimer.get() > 0.1 && flywheelReleaseTimer.get() < 2 && flywheelReleaseTimerDelay.get() > 2){
         flywheelMotor.set(1);
         intakestatus = true;
+        SmartDashboard.putNumber("Flywheel Speed", flywheelEncoder.getVelocity());
+        SmartDashboard.putBoolean("Note Available", false);
       } else if (flywheelReleaseTimer.get() < 0.1 || flywheelReleaseTimer.get() > 2){
         flywheelMotor.stopMotor();
       }
@@ -366,29 +390,32 @@ public class Robot extends TimedRobot {
     //Reverse intake
     if (controller2.getYButton()){
       reversedintakestatus = true;
-    } else if (intakeReversedTimer.get() > 0.1 && intakeReversedTimer.get() < 0.15 && intakeReversedTimerDelay.get() > 0.15){
+      SmartDashboard.putBoolean("Note Available", false);
+    } else if (intakeReversedTimer.get() > 0.1 && intakeReversedTimer.get() < 0.13 && intakeReversedTimerDelay.get() > 0.13){
       reversedintakestatus = true;
     } else {
       reversedintakestatus = false;
     }
 
     //Full Stop of Intake and Shooter
-    if ((controller1.getLeftTriggerAxis() > 0.5 || controller2.getXButtonPressed()) && !xButtonDelay){
+    if ((controller1.getLeftTriggerAxis() > 0.5 || controller2.getXButton()) && !xButtonDelay){
       flywheelMotor.stopMotor();
       intakestatus = false;
       xButtonDelay = true;
     }
-    if (controller1.getLeftTriggerAxis() < 0.5 || controller2.getXButtonReleased()){
+    if (controller1.getLeftTriggerAxis() < 0.5 || !controller2.getXButton()){
       xButtonDelay = false;
     }
 
     //Intake setting
     if (intakestatus){
       intakeMotor.set(0.9);
+      SmartDashboard.putBoolean("Intake On: ", intakestatus);
     } else if (reversedintakestatus){
       intakeMotor.set(-0.9);
     } else {
       intakeMotor.stopMotor();
+      SmartDashboard.putBoolean("Intake On: ", intakestatus);
     }
   }
   /** This function is called once each time the robot enters test mode. */
