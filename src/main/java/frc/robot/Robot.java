@@ -67,7 +67,11 @@ public class Robot extends TimedRobot {
   private final Timer flywheelReleaseTimerDelay = new Timer();
   private double autoShooterStartTime = 0;
   private double autoIntakeStartTime = 0;
-  
+
+  //Amp Testing
+  private final Timer ampReleaseTimer = new Timer();
+  private final Timer ampReleaseTimerDelay = new Timer();
+
   //Status' and Button Delays
   private boolean intakestatus = false;
   private boolean lBumperDelay = false;
@@ -76,7 +80,7 @@ public class Robot extends TimedRobot {
   private boolean reversedintakestatus = false;
 
   //TeleOp Half Speed
-  private double halved = 1;
+  private boolean halved = false;
 
   //Autonomous Paths for SmartDashboard
   private static final String basicAutoLeft = "Left Basic";
@@ -213,6 +217,10 @@ public class Robot extends TimedRobot {
       allianceMult = 1;
     }
 
+    //Other Misc. Settings
+    autoShooterStartTime = 0;
+    autoIntakeStartTime = 0;
+
     //Restarting the Main Timer
     autoTimer.restart();
   }
@@ -250,7 +258,7 @@ public class Robot extends TimedRobot {
           break;
         //Auto for the Three Closest Notes
         case closeAuto:
-          if (autoTimer.get() < 4.15){
+          /*if (autoTimer.get() < 4.15){
             autoTurnLeft();
             autoIntakeStartTime = autoTimer.get();
           } else if (autoTimer.get() < 5.65){
@@ -271,16 +279,33 @@ public class Robot extends TimedRobot {
             autoStop();
           } else {
             autoStop();
+          }*/
+          if (autoTimer.get() < 5.8){
+            autoForwardSlow();
+            autoIntakeSequence();
+          } else if (autoTimer.get() < 6.8){
+            autoBackwardSlow();
+            autoIntakeSequence();
+          } else if (autoTimer.get() < 8.5){
+            autoBackwardSlow();
+            autoShooterStartTime = autoTimer.get();
+          } else if (autoTimer.get() < 11.6){
+            autoShooterSequence();
+            autoStop();
+          } else {
+            autoStop();
           }
           break;
         //Auto for the Far Notes Closest to the Stage
         case farAutoTwoNote:
           if (autoTimer.get() < 4.3){
             autoTurnLeft();
-          } else if (autoTimer.get() < 6.3){
+          } else if (autoTimer.get() < 4.8){
+            autoStop();
+          } else if (autoTimer.get() < 5.8){
             autoForwardFast();
           } else {
-            autoStop();
+            autoTurnLeft();
           }
           break;
         //Auto for the Far Notes Furthest from the Stage
@@ -292,7 +317,7 @@ public class Robot extends TimedRobot {
           } else if (autoTimer.get() < 7.5){
             autoForwardFast();
           } else {
-            autoStop();
+            autoTurnRight();
           }
           break;
       }
@@ -305,6 +330,8 @@ public class Robot extends TimedRobot {
     //Timer Reset
     flywheelReleaseTimer.restart();
     flywheelReleaseTimerDelay.restart();
+    ampReleaseTimer.restart();
+    ampReleaseTimerDelay.restart();
     intakeReversedTimer.restart();
     intakeReversedTimerDelay.restart();
     SmartDashboard.putBoolean("Note Available: ", false);
@@ -316,11 +343,16 @@ public class Robot extends TimedRobot {
   @Override
   public void teleopPeriodic() {
     //Movement Controls
-    if ((controller1.getLeftY() >= 0.1 || controller1.getLeftY() <= -0.1) && (controller1.getRightX() <= 0.1 && controller1.getRightX() >= -0.1)){
-      robotDrive1.tankDrive(controller1.getLeftY()*halved, controller1.getLeftY()*halved);
-      robotDrive2.tankDrive(controller1.getLeftY()*halved, controller1.getLeftY()*halved);
-    } else if ((controller1.getLeftY() >= 0.1 || controller1.getLeftY() <= -0.1) && (controller1.getRightX() > 0.1 || controller1.getRightX() < -0.1)){
-      if (halved == 0.5){
+    if ((controller1.getLeftY() >= 0.15 || controller1.getLeftY() <= -0.15) && (controller1.getRightX() <= 0.15 && controller1.getRightX() >= -0.15)){
+      if (halved){
+        robotDrive1.tankDrive(controller1.getLeftY()*0.7, controller1.getLeftY()*0.7);
+        robotDrive2.tankDrive(controller1.getLeftY()*0.7, controller1.getLeftY()*0.7);
+      } else {
+        robotDrive1.tankDrive(controller1.getLeftY(), controller1.getLeftY());
+        robotDrive2.tankDrive(controller1.getLeftY(), controller1.getLeftY());
+      }
+    } else if ((controller1.getLeftY() >= 0.15 || controller1.getLeftY() <= -0.15) && (controller1.getRightX() > 0.15 || controller1.getRightX() < -0.15)){
+      if (halved){
         robotDrive1.tankDrive(controller1.getLeftY()*0.5 - controller1.getRightX()*0.3, controller1.getLeftY()*0.5 + controller1.getRightX()*0.3);
         robotDrive2.tankDrive(controller1.getLeftY()*0.5 - controller1.getRightX()*0.3, controller1.getLeftY()*0.5 + controller1.getRightX()*0.3);
       } else {
@@ -328,7 +360,7 @@ public class Robot extends TimedRobot {
         robotDrive2.tankDrive(controller1.getLeftY()*0.7 - controller1.getRightX()*0.3, controller1.getLeftY()*0.7 + controller1.getRightX()*0.3);
       }
     } else {
-      if (halved == 0.5){
+      if (halved){
         robotDrive1.tankDrive(-controller1.getRightX()*0.7, controller1.getRightX()*0.7);
         robotDrive2.tankDrive(-controller1.getRightX()*0.7, controller1.getRightX()*0.7);
       } else {
@@ -337,51 +369,54 @@ public class Robot extends TimedRobot {
       }
     }
     if (controller1.getRightBumperPressed() && !rBumperDelay){
-      if (halved == 0.5){
-        halved = 1;
-      } else {
-        halved = 0.5;
-      }
+      halved = !halved;
       rBumperDelay = true;
     }
     if (controller1.getRightBumperReleased()){
       rBumperDelay = false;
     }
 
-    //Controller 1 & 2 Intake
-    if (controller1.getLeftBumperPressed() || controller2.getAButtonPressed() && !lBumperDelay){
+    //Controller 1 Intake
+    if (controller1.getLeftBumperPressed() && !lBumperDelay){
       intakestatus = !intakestatus;
       lBumperDelay = true;
     }
-    if (controller1.getLeftBumperReleased() || controller2.getAButtonReleased()){
+    if (controller1.getLeftBumperReleased()){
       lBumperDelay = false;
     }
 
     //Intake Auto-Stop
     if (getDistance() < 20){
       intakestatus = false;
-      SmartDashboard.putBoolean("Note Available", true);
-      System.out.println("Sensor Working");
+      SmartDashboard.putBoolean("Note Available: ", true);
       if (!intakeReversedTimerReset){
         intakeReversedTimer.restart();
         intakeReversedTimerReset = true;
       }
     } else {
+      SmartDashboard.putBoolean("Note Available: ", false);
       intakeReversedTimerReset = false;
+    }
+
+    //Amp Testing
+    if (controller1.getAButtonPressed()){
+      ampReleaseTimer.reset();
     }
 
     //Shooting
     if (controller2.getBButton()){
       flywheelMotor.set(1);
       flywheelReleaseTimer.restart();
-      SmartDashboard.putNumber("Flywheel Speed", flywheelEncoder.getVelocity());
+      SmartDashboard.putNumber("Flywheel Speed: ", flywheelEncoder.getVelocity());
     }
     if (!controller2.getBButton()){
       if (flywheelReleaseTimer.get() > 0.1 && flywheelReleaseTimer.get() < 2 && flywheelReleaseTimerDelay.get() > 2){
         flywheelMotor.set(1);
         intakestatus = true;
-        SmartDashboard.putNumber("Flywheel Speed", flywheelEncoder.getVelocity());
-        SmartDashboard.putBoolean("Note Available", false);
+        SmartDashboard.putNumber("Flywheel Speed: ", flywheelEncoder.getVelocity());
+      } else if (ampReleaseTimer.get() > 0.1 && ampReleaseTimer.get() <= 1.5 && ampReleaseTimerDelay.get() > 1.5){
+        flywheelMotor.set(0.7);
+        intakestatus = true;
       } else if (flywheelReleaseTimer.get() < 0.1 || flywheelReleaseTimer.get() > 2){
         flywheelMotor.stopMotor();
       }
@@ -390,8 +425,7 @@ public class Robot extends TimedRobot {
     //Reverse intake
     if (controller2.getYButton()){
       reversedintakestatus = true;
-      SmartDashboard.putBoolean("Note Available", false);
-    } else if (intakeReversedTimer.get() > 0.1 && intakeReversedTimer.get() < 0.13 && intakeReversedTimerDelay.get() > 0.13){
+    } else if (intakeReversedTimer.get() > 0.1 && intakeReversedTimer.get() < 0.12 && intakeReversedTimerDelay.get() > 0.13){
       reversedintakestatus = true;
     } else {
       reversedintakestatus = false;
@@ -410,13 +444,12 @@ public class Robot extends TimedRobot {
     //Intake setting
     if (intakestatus){
       intakeMotor.set(0.9);
-      SmartDashboard.putBoolean("Intake On: ", intakestatus);
     } else if (reversedintakestatus){
       intakeMotor.set(-0.9);
     } else {
       intakeMotor.stopMotor();
-      SmartDashboard.putBoolean("Intake On: ", intakestatus);
     }
+    SmartDashboard.putBoolean("Intake On: ", intakestatus);
   }
   /** This function is called once each time the robot enters test mode. */
   @Override
