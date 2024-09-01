@@ -53,7 +53,7 @@ public class Robot extends TimedRobot {
 
   //Controllers
   private XboxController controller1 = new XboxController(0);
-  private XboxController controller2 = new XboxController(1);
+  //private XboxController controller2 = new XboxController(1);
 
   //Sensors
   private AnalogInput noteProx = new AnalogInput(0);
@@ -238,7 +238,7 @@ public class Robot extends TimedRobot {
     //LED Strip Setup
     ledStrip = new AddressableLED(9);
     ledStripBuffer = new AddressableLEDBuffer(12);
-    ledStrip.setLength(ledStripBuffer.getLength());
+    ledStrip.setLength(ledStripBuffer.getLength()); 
     ledStrip.setData(ledStripBuffer);
     ledStrip.start();
     LEDYellow();
@@ -449,17 +449,17 @@ public class Robot extends TimedRobot {
     }
 
     //Amp Testing
-    if (controller2.getAButtonPressed()){
+    if (controller1.getAButtonPressed()){
       ampReleaseTimer.restart();
     }
 
     //Shooting
-    if (controller2.getBButton()){
+    if (controller1.getBButton()){
       flywheelMotor.set(1);
       flywheelReleaseTimer.restart();
       SmartDashboard.putNumber("Flywheel Speed: ", flywheelEncoder.getVelocity());
     }
-    if (!controller2.getBButton()){
+    if (!controller1.getBButton()){
       if (flywheelReleaseTimer.get() > 0.1 && flywheelReleaseTimer.get() < 2 && flywheelReleaseTimerDelay.get() > 2){
         flywheelMotor.set(1);
         intakestatus = true;
@@ -473,7 +473,7 @@ public class Robot extends TimedRobot {
     }
 
     //Reverse intake
-    if (controller2.getYButton()){
+    if (controller1.getYButton()){
       reversedintakestatus = true;
     } else if (intakeReversedTimer.get() > 0.1 && intakeReversedTimer.get() < 0.12 && intakeReversedTimerDelay.get() > 0.13){
       reversedintakestatus = true;
@@ -482,12 +482,12 @@ public class Robot extends TimedRobot {
     }
 
     //Full Stop of Intake and Shooter
-    if ((controller1.getLeftTriggerAxis() > 0.5 || controller2.getXButton()) && !xButtonDelay){
+    if ((controller1.getLeftTriggerAxis() > 0.5 || controller1.getXButton()) && !xButtonDelay){
       flywheelMotor.stopMotor();
       intakestatus = false;
       xButtonDelay = true;
     }
-    if (controller1.getLeftTriggerAxis() < 0.5 || !controller2.getXButton()){
+    if (controller1.getLeftTriggerAxis() < 0.5 || !controller1.getXButton()){
       xButtonDelay = false;
     }
 
