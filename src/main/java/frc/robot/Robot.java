@@ -14,6 +14,8 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 //import edu.wpi.first.wpilibj2.command.PIDCommand;
 import edu.wpi.first.cameraserver.CameraServer;
 import edu.wpi.first.wpilibj.XboxController;
+import edu.wpi.first.wpilibj.AddressableLED;
+import edu.wpi.first.wpilibj.AddressableLEDBuffer;
 import edu.wpi.first.wpilibj.AnalogInput;
 
 import com.revrobotics.CANSparkMax;
@@ -82,12 +84,16 @@ public class Robot extends TimedRobot {
   //TeleOp Half Speed
   private boolean halved = false;
 
+  //LED Strip Initialization
+  private AddressableLED ledStrip;
+  private AddressableLEDBuffer ledStripBuffer;
+
   //Autonomous Paths for SmartDashboard
-  private static final String basicAutoLeft = "Left Basic";
-  private static final String basicAutoRight = "Right Basic";
-  private static final String closeAuto = "Four Note Close";
-  private static final String farAutoTwoNote = "Two Note Far";
-  private static final String farAutoOneNote = "One Note Far";
+  private static final String basicAutoSource = "Source Basic";
+  private static final String basicAutoAmp = "Amp Basic";
+  private static final String closeAuto = "Two Note Stage";
+  private static final String farAutoAmp = "Amp Far";
+  private static final String farAutoSource = "Source Far";
   private String autoSelected;
   private final SendableChooser<String> autoChooser = new SendableChooser<>();
 
@@ -115,6 +121,38 @@ public class Robot extends TimedRobot {
   //Distance from IR sensor. Used with intake.
   public double getDistance() {
     return (Math.pow(noteProx.getAverageVoltage(), -1.2045)) * 27.726;
+  }
+
+  //LED Colour Functions
+  public void LEDBlue(){
+    for (int i = 0; i < ledStripBuffer.getLength(); i++){
+      ledStripBuffer.setRGB(i, 0, 100, 255);
+    }
+    ledStrip.setData(ledStripBuffer);
+  }
+  public void LEDRed(){
+    for (int i = 0; i < ledStripBuffer.getLength(); i++){
+      ledStripBuffer.setRGB(i, 255, 0, 0);
+    }
+    ledStrip.setData(ledStripBuffer);
+  }
+  public void LEDYellow(){
+    for (int i = 0; i < ledStripBuffer.getLength(); i++){
+      ledStripBuffer.setRGB(i, 255, 150, 0);
+    }
+    ledStrip.setData(ledStripBuffer);
+  }
+  public void LEDGreen(){
+    for (int i = 0; i < ledStripBuffer.getLength(); i++){
+      ledStripBuffer.setRGB(i, 0, 255, 10);
+    }
+    ledStrip.setData(ledStripBuffer);
+  }
+  public void LEDOff(){
+    for (int i = 0; i < ledStripBuffer.getLength(); i++){
+      ledStripBuffer.setRGB(i, 0, 0, 0);
+    }
+    ledStrip.setData(ledStripBuffer);
   }
 
   //Autonomous Functions
@@ -185,11 +223,11 @@ public class Robot extends TimedRobot {
     SmartDashboard.putBoolean("Intake On: ", intakestatus);
 
     //Autonomous SmartDashboard Option Adding
-    autoChooser.setDefaultOption("Left Basic", basicAutoLeft);
-    autoChooser.setDefaultOption("Right Basic", basicAutoRight);
-    autoChooser.addOption("Four Note Close", closeAuto);
-    autoChooser.addOption("Two Note Far", farAutoTwoNote);
-    autoChooser.addOption("One Note Far", farAutoOneNote);
+    autoChooser.setDefaultOption("Source Basic", basicAutoSource);
+    autoChooser.setDefaultOption("Amp Basic", basicAutoAmp);
+    autoChooser.addOption("Two Note Stage", closeAuto);
+    autoChooser.addOption("Amp Far", farAutoAmp);
+    autoChooser.addOption("Source Far", farAutoSource);
     SmartDashboard.putData("Auto Choices", autoChooser);
 
     //Alliance SmartDashboard Option Adding
@@ -197,6 +235,14 @@ public class Robot extends TimedRobot {
     allianceChooser.addOption("Blue Alliance", blueAlliance);
     SmartDashboard.putData("Alliance Choices", allianceChooser);
 
+    //LED Strip Setup
+    ledStrip = new AddressableLED(9);
+    ledStripBuffer = new AddressableLEDBuffer(12);
+    ledStrip.setLength(ledStripBuffer.getLength());
+    ledStrip.setData(ledStripBuffer);
+    ledStrip.start();
+    LEDYellow();
+    
     //Camera Bootup
     CameraServer.startAutomaticCapture();
   }
@@ -221,6 +267,9 @@ public class Robot extends TimedRobot {
     autoShooterStartTime = 0;
     autoIntakeStartTime = 0;
 
+    //LED Setting
+    LEDBlue();
+
     //Restarting the Main Timer
     autoTimer.restart();
   }
@@ -238,7 +287,7 @@ public class Robot extends TimedRobot {
     if (autoTimer.get() > 4){
       switch (autoSelected){
         //Basic Auto Path
-        case basicAutoLeft:
+        case basicAutoSource:
           if (autoTimer.get() < 5){
             autoForwardFast();
           } else if (autoTimer.get() < 5.4){
@@ -247,7 +296,7 @@ public class Robot extends TimedRobot {
             autoStop();
           }
           break;
-        case basicAutoRight:
+        case basicAutoAmp:
           if (autoTimer.get() < 4.27){
             autoTurnLeft();
           } else if (autoTimer.get() < 7.3){
@@ -297,7 +346,7 @@ public class Robot extends TimedRobot {
           }
           break;
         //Auto for the Far Notes Closest to the Stage
-        case farAutoTwoNote:
+        case farAutoAmp:
           if (autoTimer.get() < 4.3){
             autoTurnLeft();
           } else if (autoTimer.get() < 4.8){
@@ -309,7 +358,7 @@ public class Robot extends TimedRobot {
           }
           break;
         //Auto for the Far Notes Furthest from the Stage
-        case farAutoOneNote:
+        case farAutoSource:
           if (autoTimer.get() < 6){
             autoForwardSlow();
           } else if (autoTimer.get() < 6.2){
@@ -337,6 +386,7 @@ public class Robot extends TimedRobot {
     SmartDashboard.putBoolean("Note Available: ", false);
     SmartDashboard.putNumber("Flywheel Speed: ", flywheelEncoder.getVelocity());
     SmartDashboard.putBoolean("Intake On: ", intakestatus);
+    LEDRed();
   }
 
   /** This function is called periodically during teleoperated mode. */
@@ -375,7 +425,7 @@ public class Robot extends TimedRobot {
     if (controller1.getRightBumperReleased()){
       rBumperDelay = false;
     }
-
+    
     //Controller 1 Intake
     if (controller1.getLeftBumperPressed() && !lBumperDelay){
       intakestatus = !intakestatus;
@@ -399,8 +449,8 @@ public class Robot extends TimedRobot {
     }
 
     //Amp Testing
-    if (controller1.getAButtonPressed()){
-      ampReleaseTimer.reset();
+    if (controller2.getAButtonPressed()){
+      ampReleaseTimer.restart();
     }
 
     //Shooting
@@ -414,10 +464,10 @@ public class Robot extends TimedRobot {
         flywheelMotor.set(1);
         intakestatus = true;
         SmartDashboard.putNumber("Flywheel Speed: ", flywheelEncoder.getVelocity());
-      } else if (ampReleaseTimer.get() > 0.1 && ampReleaseTimer.get() <= 1.5 && ampReleaseTimerDelay.get() > 1.5){
-        flywheelMotor.set(0.7);
+      } else if (ampReleaseTimer.get() > 0.1 && ampReleaseTimer.get() < 1 && ampReleaseTimerDelay.get() > 1.5){
+        flywheelMotor.set(0.5);
         intakestatus = true;
-      } else if (flywheelReleaseTimer.get() < 0.1 || flywheelReleaseTimer.get() > 2){
+      } else if (flywheelReleaseTimer.get() < 0.1 || flywheelReleaseTimer.get() > 4){
         flywheelMotor.stopMotor();
       }
     }
@@ -441,13 +491,38 @@ public class Robot extends TimedRobot {
       xButtonDelay = false;
     }
 
-    //Intake setting
+    //Intake setting combined with Blue Light Flashing
     if (intakestatus){
       intakeMotor.set(0.9);
+      if (flywheelReleaseTimer.get() > 1 && flywheelReleaseTimer.get() < 3 && flywheelReleaseTimerDelay.get() > 3){
+        flywheelMotor.stopMotor();
+        if (flywheelReleaseTimer.get() % 0.25 > 0.125){
+          LEDBlue();
+        } else {
+          LEDOff();
+        }
+      } else {
+        LEDYellow();
+      }
     } else if (reversedintakestatus){
       intakeMotor.set(-0.9);
+      LEDRed();
     } else {
       intakeMotor.stopMotor();
+      if (getDistance() < 20){
+        LEDGreen();
+      } else {
+        if (flywheelReleaseTimer.get() > 1 && flywheelReleaseTimer.get() < 3 && flywheelReleaseTimerDelay.get() > 3){
+          flywheelMotor.stopMotor();
+          if (flywheelReleaseTimer.get() % 0.25 > 0.125){
+            LEDBlue();
+          } else {
+            LEDOff();
+          }
+        } else {
+          LEDRed();
+        }
+      }
     }
     SmartDashboard.putBoolean("Intake On: ", intakestatus);
   }
